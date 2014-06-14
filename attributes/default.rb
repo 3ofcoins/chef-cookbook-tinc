@@ -1,3 +1,6 @@
+default['tinc']['name'] = name.gsub(/[^a-z0-9]/, '_')
+default['tinc']['net'] = 'default'
+default['tinc']['interface'] = 'tinc0'
 default['tinc']['iptables'] = run_context.loaded_recipe?('iptables')
 default['tinc']['address'] =
   ( node['cloud'] && node['cloud']['public_ipv4']) || node['ipaddress']

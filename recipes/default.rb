@@ -25,7 +25,7 @@ unless node['tinc']['hex_address']
     ha = Digest::MD5.hexdigest(ha_base)[-4..-1]
     if hex_address_unique?(ha)
       node.set['tinc']['hex_address'] = ha
-      node.save
+      node.save unless Chef::Config[:solo]
       break
     end
     ha_base = "#{ha_base}'"
@@ -41,28 +41,26 @@ node.set['tinc']['ipv4_address'] = [
 node.set['tinc']['ipv6_address'] = [
   node['tinc']['ipv6_subnet'],
   node['tinc']['hex_address'],
-  ':1'].join(':')
+  '0:0:0:1'].join(':')
 
-directory '/etc/tinc/hosts' do
+directory "/etc/tinc/#{node['tinc']['net']}/hosts" do
   recursive true
 end
 
-directory '/etc/tinc/conf.d'
+directory "/etc/tinc/#{node['tinc']['net']}/conf.d"
 
 directory '/var/run/tinc'
 
-file '/etc/tinc/tinc.conf' do
+file "/etc/tinc/#{node['tinc']['net']}/tinc.conf" do
   content <<EOF
-Name = $HOST
+Name = #{node['tinc']['name']}
 GraphDumpFile = /var/run/tinc.dot
-Interface = tinc0
+Interface = #{node['tinc']['interface']}
 EOF
   notifies :restart, 'service[tinc]'
 end
 
-tinc_name = node.name.gsub(/[^a-z0-9]/, '_')
-
-file "/etc/tinc/hosts/#{tinc_name}" do
+file "/etc/tinc/#{node['tinc']['net']}/hosts/#{node['tinc']['name']}" do
   content <<EOF
 Address = #{node['tinc']['address']}
 Subnet = #{node['tinc']['ipv4_address']}
@@ -71,7 +69,7 @@ EOF
   action :create_if_missing
 end
 
-file '/etc/tinc/tinc-up' do
+file "/etc/tinc/#{node['tinc']['net']}/tinc-up" do
   content <<EOF
 #!/bin/sh
 ifconfig $INTERFACE up \\
@@ -83,7 +81,7 @@ EOF
   notifies :restart, 'service[tinc]'
 end
 
-file '/etc/tinc/tinc-down' do
+file "/etc/tinc/#{node['tinc']['net']}/tinc-down" do
   content <<EOF
 #!/bin/sh
 ifconfig $INTERFACE down
@@ -92,14 +90,18 @@ EOF
   notifies :restart, 'service[tinc]'
 end
 
-execute 'tincd -K 4096 < /dev/null' do
-  creates '/etc/tinc/rsa_key.priv'
+execute "tincd -n #{node['tinc']['net']} -K 4096 < /dev/null" do
+  creates "/etc/tinc/#{node['tinc']['net']}/rsa_key.priv"
+end
+
+file '/etc/tinc/nets.boot' do
+  content "#{node['tinc']['net']}\n"
 end
 
 ruby_block 'tinc::host' do
   block do
-    node.set['tinc']['host_file'] = File.read("/etc/tinc/hosts/#{tinc_name}")
-    node.save
+    node.set['tinc']['host_file'] = File.read("/etc/tinc/#{node['tinc']['net']}/hosts/#{node['tinc']['name']}")
+    node.save unless Chef::Config[:solo]
   end
 end
 
@@ -110,16 +112,15 @@ if Chef::Config[:solo]
 else
   search(:node, 'tinc_host_file:[* TO *]').each do |peer_node|
     next if peer_node.name == node.name
-    peer_name = peer_node.name.gsub(/[^a-z0-9]/, '_')
-    file "/etc/tinc/hosts/#{peer_name}" do
+    file "/etc/tinc/#{node['tinc']['net']}/hosts/#{peer_node['tinc']['name']}" do
       content peer_node['tinc']['host_file']
       mode 0600
     end
-    connect_to << peer_name
+    connect_to << peer_node['tinc']['name']
   end
 end
 
-file '/etc/tinc/conf.d/connect_to.conf' do
+file "/etc/tinc/#{node['tinc']['net']}/conf.d/connect_to.conf" do
   content connect_to
     .sort
     .map { |peer| "ConnectTo = #{peer}\n" }
