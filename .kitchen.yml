@@ -22,5 +22,5 @@ platforms:
 suites:
   - name: default
     run_list:
-      - recipe[tinc::default]
-    attributes:
+      - recipe[iptables]
+      - recipe[tinc]

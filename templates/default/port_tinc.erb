@@ -1,3 +1,5 @@
 -A FWR -p tcp --dport 655 -j ACCEPT
 -A FWR -p udp --dport 655 -j ACCEPT
-# -A FWR -i tinc0 -j ACCEPT
+<% if node['tinc']['iptables_allow_internal_traffic'] -%>
+-A FWR -i <%= node['tinc']['interface'] %> -j ACCEPT
+<% end -%>
