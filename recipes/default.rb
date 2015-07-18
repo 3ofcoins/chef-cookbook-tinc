@@ -14,7 +14,7 @@ def hex_address_unique?(hex_address)
     Chef::Log.warn('Running solo, cannot check address uniqueness')
     return true
   else
-    return search(:node, "tinc_hex_address:#{ha}").empty?
+    return search(:node, "tinc_hex_address:#{hex_address}").empty?
   end
 end
 
