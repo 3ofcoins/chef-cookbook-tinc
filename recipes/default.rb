@@ -129,6 +129,9 @@ file "/etc/tinc/#{node['tinc']['net']}/conf.d/connect_to.conf" do
 end
 
 service 'tinc' do
+  if node['platform_family'] == 'archlinux'
+    service_name "tincd@#{node['tinc']['net']}"
+  end
   action [:enable, :start]
 end
 
