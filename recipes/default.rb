@@ -60,13 +60,22 @@ EOF
   notifies :restart, 'service[tinc]'
 end
 
+# Generate the host's private key
+execute "tincd -n #{node['tinc']['net']} -K 4096 < /dev/null" do
+  creates "/etc/tinc/#{node['tinc']['net']}/rsa_key.priv"
+end
+
 file "/etc/tinc/#{node['tinc']['net']}/hosts/#{node['tinc']['name']}" do
   content <<EOF
 Address = #{node['tinc']['address']}
 Subnet = #{node['tinc']['ipv4_address']}
 Subnet = #{node['tinc']['ipv6_address']}
+
+#{OpenSSL::PKey::RSA.new(File.read('/etc/tinc/aether/rsa_key.priv')).public_key.to_s}
 EOF
-  action :create_if_missing
+  mode '0644'
+  owner 'root'
+  group 'root'
 end
 
 file "/etc/tinc/#{node['tinc']['net']}/tinc-up" do
@@ -90,9 +99,6 @@ EOF
   notifies :restart, 'service[tinc]'
 end
 
-execute "tincd -n #{node['tinc']['net']} -K 4096 < /dev/null" do
-  creates "/etc/tinc/#{node['tinc']['net']}/rsa_key.priv"
-end
 
 file '/etc/tinc/nets.boot' do
   content "#{node['tinc']['net']}\n"
@@ -114,7 +120,9 @@ else
     next if peer_node.name == node.name
     file "/etc/tinc/#{node['tinc']['net']}/hosts/#{peer_node['tinc']['name']}" do
       content peer_node['tinc']['host_file']
-      mode 0600
+      mode '0644'
+      owner 'root'
+      group 'root'
     end
     connect_to << peer_node['tinc']['name']
   end
