@@ -14,7 +14,7 @@ def hex_address_unique?(hex_address)
     Chef::Log.warn('Running solo, cannot check address uniqueness')
     return true
   else
-    return search(:node, "tinc_hex_address:#{ha}").empty?
+    return search(:node, "tinc_hex_address:#{hex_address}").empty?
   end
 end
 
@@ -60,13 +60,24 @@ EOF
   notifies :restart, 'service[tinc]'
 end
 
+tinc_private_key = "/etc/tinc/#{node['tinc']['net']}/rsa_key.priv"
+
+# Generate the host's private key
+execute "tincd -n #{node['tinc']['net']} -K 4096 < /dev/null" do
+  creates tinc_private_key
+end
+
 file "/etc/tinc/#{node['tinc']['net']}/hosts/#{node['tinc']['name']}" do
   content <<EOF
 Address = #{node['tinc']['address']}
 Subnet = #{node['tinc']['ipv4_address']}
 Subnet = #{node['tinc']['ipv6_address']}
+
+#{OpenSSL::PKey::RSA.new(File.read(tinc_private_key)).public_key.to_s if File.exists?(tinc_private_key)}
 EOF
-  action :create_if_missing
+  mode '0644'
+  owner 'root'
+  group 'root'
 end
 
 file "/etc/tinc/#{node['tinc']['net']}/tinc-up" do
@@ -90,9 +101,6 @@ EOF
   notifies :restart, 'service[tinc]'
 end
 
-execute "tincd -n #{node['tinc']['net']} -K 4096 < /dev/null" do
-  creates "/etc/tinc/#{node['tinc']['net']}/rsa_key.priv"
-end
 
 file '/etc/tinc/nets.boot' do
   content "#{node['tinc']['net']}\n"
@@ -114,7 +122,9 @@ else
     next if peer_node.name == node.name
     file "/etc/tinc/#{node['tinc']['net']}/hosts/#{peer_node['tinc']['name']}" do
       content peer_node['tinc']['host_file']
-      mode 0600
+      mode '0644'
+      owner 'root'
+      group 'root'
     end
     connect_to << peer_node['tinc']['name']
   end
@@ -129,6 +139,12 @@ file "/etc/tinc/#{node['tinc']['net']}/conf.d/connect_to.conf" do
 end
 
 service 'tinc' do
+  case node['platform_family']
+  when 'arch'
+    service_name "tincd@#{node['tinc']['net']}"
+  else
+    service_name 'tinc'
+  end
   action [:enable, :start]
 end
 
