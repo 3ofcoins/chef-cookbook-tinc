@@ -60,9 +60,11 @@ EOF
   notifies :restart, 'service[tinc]'
 end
 
+tinc_private_key = "/etc/tinc/#{node['tinc']['net']}/rsa_key.priv"
+
 # Generate the host's private key
 execute "tincd -n #{node['tinc']['net']} -K 4096 < /dev/null" do
-  creates "/etc/tinc/#{node['tinc']['net']}/rsa_key.priv"
+  creates tinc_private_key
 end
 
 file "/etc/tinc/#{node['tinc']['net']}/hosts/#{node['tinc']['name']}" do
@@ -71,7 +73,7 @@ Address = #{node['tinc']['address']}
 Subnet = #{node['tinc']['ipv4_address']}
 Subnet = #{node['tinc']['ipv6_address']}
 
-#{OpenSSL::PKey::RSA.new(File.read('/etc/tinc/aether/rsa_key.priv')).public_key.to_s}
+#{OpenSSL::PKey::RSA.new(File.read(tinc_private_key)).public_key.to_s if File.exists?(tinc_private_key)}
 EOF
   mode '0644'
   owner 'root'
